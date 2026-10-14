@@ -25,31 +25,7 @@ const passError = ref('')
 const passMessage = ref('')
 
 async function refresh() {
-  if (!session.user) return
-  const jobs = []
-  if (session.can('stock:account:view')) jobs.push(store.refreshAccount())
-  else store.account = null
-  if (session.can('stock:monitor:view')) jobs.push(store.refreshStatus())
-  await Promise.allSettled(jobs)
-}
-
-async function logout() {
-  await session.logout()
-  store.account = null
-  router.push('/login')
-}
-
-async function changePassword() {
-  passError.value = ''
-  passMessage.value = ''
-  try {
-    await api('/api/v1/auth/password', { oldPassword: oldPassword.value, newPassword: newPassword.value })
-    oldPassword.value = ''
-    newPassword.value = ''
-    passMessage.value = '密码已更新'
-  } catch (err) {
-    passError.value = err.message
-  }
+  await Promise.allSettled([store.refreshAccount(), store.refreshStatus(), store.refreshSource()])
 }
 
 let timer
@@ -100,8 +76,7 @@ watch(() => session.user?.id, refresh)
           <i></i>
           <span>{{ store.status.lastError ? '行情扫描异常' : '盯盘运行中' }}</span>
         </div>
-        <div v-else class="pulse"><i></i><span>已登录</span></div>
-        <span>数据源 · 东方财富公开行情</span>
+        <span class="source" :class="{ fallback: store.source.fallback }">数据源 · {{ store.source.dataSourceName || '东方财富公开行情' }}</span>
         <span class="disclaimer">预测与交易均为研究模拟，不构成投资建议</span>
       </header>
       <RouterView />

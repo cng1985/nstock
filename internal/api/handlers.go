@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 
+	"nstock/internal/market"
 	"nstock/internal/ncode"
 	"nstock/internal/quant"
 	"nstock/internal/service"
@@ -86,7 +87,17 @@ type alertUpdateRequest struct {
 
 func (s *Server) health(c *gin.Context) {
 	s.handle(c, "stock:system:view", &emptyRequest{}, func(context.Context) (any, error) {
-		return gin.H{"service": "nstock", "dataSource": "eastmoney"}, nil
+		status := s.svc.SourceStatus()
+		if status.Name == "" {
+			status.Name = market.SourceEastMoney
+			status.Label = market.SourceLabel(status.Name)
+		}
+		return gin.H{
+			"service":        "nstock",
+			"dataSource":     status.Name,
+			"dataSourceName": status.Label,
+			"fallback":       status.Fallback,
+		}, nil
 	})
 }
 

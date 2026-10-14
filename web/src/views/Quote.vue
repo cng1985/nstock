@@ -37,6 +37,7 @@ async function load() {
   else if (!error.value) error.value = k.reason.message
   if (w.status === 'fulfilled') watches.value = w.value.data || []
   if (!alertThreshold.value && quote.value?.price) alertThreshold.value = quote.value.price
+  await store.refreshSource()
 }
 
 async function toggleWatch() {

@@ -43,8 +43,10 @@ type watchQuoteDTO struct {
 }
 
 type quoteListDTO struct {
-	Items   []watchQuoteDTO `json:"items"`
-	Warning string          `json:"warning,omitempty"`
+	Items    []watchQuoteDTO `json:"items"`
+	Warning  string          `json:"warning,omitempty"`
+	Source   string          `json:"source,omitempty"`
+	Fallback bool            `json:"fallback,omitempty"`
 }
 
 type barDTO struct {
@@ -251,7 +253,7 @@ func toWatchQuotes(list service.WatchList) quoteListDTO {
 		}
 		items = append(items, row)
 	}
-	return quoteListDTO{Items: items, Warning: list.Warning}
+	return quoteListDTO{Items: items, Warning: list.Warning, Source: list.Source, Fallback: list.Fallback}
 }
 
 func toKline(view service.KlineView) klineDTO {

@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,14 +78,14 @@ func (fakeSrc) Search(_ context.Context, query string) ([]market.Hit, error) {
 
 func testEngine(t *testing.T) *gin.Engine {
 	t.Helper()
-	return testEngineToken(t, "")
+	return testEngineDir(t, filepath.Join(t.TempDir(), "missing"))
 }
 
-func testEngineToken(t *testing.T, token string) *gin.Engine {
+func testEngineDir(t *testing.T, webDir string) *gin.Engine {
 	t.Helper()
 	cfg := config.Config{
 		DBPath:          filepath.Join(t.TempDir(), "t.db"),
-		WebDir:          filepath.Join(t.TempDir(), "missing"),
+		WebDir:          webDir,
 		MonitorInterval: time.Hour,
 		Token:           token,
 	}
@@ -265,5 +267,85 @@ func TestPaperTradePredictAndMonitor(t *testing.T) {
 	rec = authed(http.MethodPost, "/api/v1/order/create", map[string]any{"code": "600000", "side": "sell", "qty": 100})
 	if rec.Code != 200 {
 		t.Fatalf("sell %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestEmbeddedFrontend(t *testing.T) {
+	h := testEngine(t)
+	rec := call(h, http.MethodGet, "/", nil)
+	body := rec.Body.String()
+	if rec.Code != 200 || !strings.Contains(body, "衡观") || !strings.Contains(body, `id="app"`) {
+		t.Fatalf("index %d %s", rec.Code, body)
+	}
+	js := quotedAsset(t, body, ".js")
+	css := quotedAsset(t, body, ".css")
+	rec = call(h, http.MethodGet, js, nil)
+	if rec.Code != 200 || !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
+		t.Fatalf("js %d %s", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	rec = call(h, http.MethodGet, css, nil)
+	if rec.Code != 200 || !strings.Contains(rec.Header().Get("Content-Type"), "text/css") {
+		t.Fatalf("css %d %s", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	rec = call(h, http.MethodGet, "/quant", nil)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `id="app"`) {
+		t.Fatalf("spa %d %s", rec.Code, rec.Body.String())
+	}
+	rec = call(h, http.MethodGet, "/quote/600000", nil)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `id="app"`) {
+		t.Fatalf("quote %d %s", rec.Code, rec.Body.String())
+	}
+	rec = call(h, http.MethodPost, "/api/v1/nope", map[string]any{})
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "接口不存在") {
+		t.Fatalf("api %d %s", rec.Code, rec.Body.String())
+	}
+	rec = call(h, http.MethodGet, "/assets/missing.js", nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("missing asset %d", rec.Code)
+	}
+}
+
+func TestDiskFrontendOverridesEmbed(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("disk-page"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console.log(1)"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := testEngineDir(t, dir)
+	rec := call(h, http.MethodGet, "/", nil)
+	if rec.Code != 200 || rec.Body.String() != "disk-page" {
+		t.Fatalf("index %d %s", rec.Code, rec.Body.String())
+	}
+	rec = call(h, http.MethodGet, "/market", nil)
+	if rec.Code != 200 || rec.Body.String() != "disk-page" {
+		t.Fatalf("spa %d %s", rec.Code, rec.Body.String())
+	}
+	rec = call(h, http.MethodGet, "/assets/app.js", nil)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "console.log") {
+		t.Fatalf("asset %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func quotedAsset(t *testing.T, body, suffix string) string {
+	t.Helper()
+	needle := "/assets/"
+	from := 0
+	for {
+		i := strings.Index(body[from:], needle)
+		if i < 0 {
+			t.Fatalf("no asset %s in %s", suffix, body)
+		}
+		i += from
+		rest := body[i:]
+		end := strings.IndexAny(rest, "\"'")
+		if end > 0 && strings.HasSuffix(rest[:end], suffix) {
+			return rest[:end]
+		}
+		from = i + len(needle)
 	}
 }

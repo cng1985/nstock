@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { api } from '../api'
 import { session } from '../auth'
 import { cls, marketLabel, num, pct } from '../format'
+import { store } from '../store'
 
 const router = useRouter()
 const query = ref('')
@@ -16,6 +17,7 @@ let timer
 async function load() {
   const res = await api('/api/v1/quote/list', { refresh: true })
   quotes.value = res.data
+  await store.refreshSource()
 }
 
 async function search() {
@@ -41,9 +43,13 @@ function schedule() {
 }
 
 async function add(code) {
+  const value = String(code || '').trim()
+  if (!value) return
   error.value = ''
   try {
-    await api('/api/v1/watch/create', { code })
+    await api('/api/v1/watch/create', { code: value })
+    query.value = ''
+    hits.value = []
     await load()
   } catch (err) {
     error.value = err.message
@@ -64,21 +70,24 @@ onMounted(load)
     <div class="page-head">
       <div>
         <h1>行情</h1>
-        <p>搜索沪深京 A 股，加入自选后会同步日线。</p>
+        <p>搜索代码或名称加入自选。东方财富不可用时会自动改用启动数据源，自选和日线仍可继续。</p>
       </div>
     </div>
     <p v-if="error" class="banner">{{ error }}</p>
     <p v-if="quotes.warning" class="banner warn">{{ quotes.warning }}</p>
     <article class="card">
-      <label>代码或名称
-        <input v-model="query" placeholder="例如 600519 或 茅台" @input="schedule" @keyup.enter="search" />
-      </label>
+      <div class="add-row">
+        <label>代码或名称
+          <input v-model="query" placeholder="例如 600519 或 茅台" @input="schedule" @keyup.enter="add(query)" />
+        </label>
+        <button class="primary" @click="add(query)">加入自选</button>
+      </div>
       <p v-if="searching" class="muted">正在搜索…</p>
       <table v-if="hits.length">
         <tbody>
           <tr v-for="hit in hits" :key="hit.secId">
             <td>{{ hit.name }} <span class="muted">{{ marketLabel(hit.market) }} {{ hit.code }}</span></td>
-            <td class="muted">{{ hit.kindName }}</td>
+            <td class="muted nowrap">{{ hit.kindName }}</td>
             <td class="right">
               <button class="ghost" @click="router.push(`/quote/${hit.code}`)">查看</button>
               <button v-if="session.can('stock:watch:create')" class="primary" @click="add(hit.code)">加入自选</button>

@@ -28,6 +28,7 @@ async function load() {
   else if (!error.value) error.value = list.reason.message
   if (ev.status === 'fulfilled') events.value = ev.value.data || []
   if (pred.status === 'fulfilled') predictions.value = pred.value.data || []
+  await store.refreshSource()
   loading.value = false
 }
 
