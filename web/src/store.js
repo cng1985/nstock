@@ -5,9 +5,11 @@ export const store = reactive({
   account: null,
   status: { running: false, lastError: '', lastScan: null, intervalSeconds: 20 },
   async refreshAccount() {
-    this.account = await api('/api/account')
+    const res = await api('/api/v1/account/get', {})
+    this.account = res.data
   },
   async refreshStatus() {
-    this.status = await api('/api/monitor/status')
+    const res = await api('/api/v1/monitor/get', {})
+    this.status = res.data
   },
 })

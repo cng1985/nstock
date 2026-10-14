@@ -1,11 +1,12 @@
-export async function api(path, options = {}) {
+export async function api(path, body) {
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+    body: JSON.stringify(body ?? {}),
   })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    throw new Error(data.error || '请求失败')
+  const payload = await res.json().catch(() => ({}))
+  if (!res.ok || payload.code !== 200) {
+    throw new Error(payload.msg || '请求失败')
   }
-  return data
+  return payload
 }

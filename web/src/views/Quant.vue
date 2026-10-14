@@ -50,13 +50,13 @@ function paramsOf(source) {
 
 async function load() {
   const [watch, list, blotter] = await Promise.all([
-    api('/api/watchlist'),
-    api('/api/strategies'),
-    api('/api/orders?limit=20'),
+    api('/api/v1/watch/list', {}),
+    api('/api/v1/strategy/list', {}),
+    api('/api/v1/order/search', { page: 1, size: 20 }),
   ])
-  watches.value = watch.items || []
-  strategies.value = list.items || []
-  orders.value = blotter.items || []
+  watches.value = watch.data || []
+  strategies.value = list.data || []
+  orders.value = blotter.data || []
   if (!form.code && watches.value.length) form.code = watches.value[0].code
   if (!manual.code && watches.value.length) manual.code = watches.value[0].code
   if (!currentId.value && strategies.value.length) select(strategies.value[0])
@@ -66,8 +66,8 @@ function select(item) {
   currentId.value = item.id
   report.value = null
   Object.assign(form, item.params || {}, { type: item.type, code: item.code, name: item.name })
-  api(`/api/backtests?strategyId=${item.id}&limit=1`).then((data) => {
-    report.value = data.items?.[0] || null
+  api('/api/v1/backtest/search', { strategyId: item.id, page: 1, size: 1 }).then((data) => {
+    report.value = data.data?.[0] || null
   }).catch(() => {})
 }
 
@@ -75,12 +75,11 @@ async function create() {
   busy.value = 'create'
   error.value = ''
   try {
-    const created = await api('/api/strategies', {
-      method: 'POST',
-      body: JSON.stringify({ name: form.name, type: form.type, code: form.code, params: paramsOf(form) }),
+    const created = await api('/api/v1/strategy/create', {
+      name: form.name, type: form.type, code: form.code, params: paramsOf(form),
     })
     await load()
-    select(created)
+    select(created.data)
     message.value = '策略已创建'
   } catch (err) {
     error.value = err.message
@@ -94,9 +93,11 @@ async function saveParams() {
   busy.value = 'save'
   error.value = ''
   try {
-    await api(`/api/strategies/${current.value.id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ name: form.name, code: form.code, params: paramsOf({ ...form, type: current.value.type }) }),
+    await api('/api/v1/strategy/update', {
+      id: current.value.id,
+      name: form.name,
+      code: form.code,
+      params: paramsOf({ ...form, type: current.value.type }),
     })
     await load()
     message.value = '参数已保存'
@@ -109,16 +110,13 @@ async function saveParams() {
 
 async function toggle() {
   if (!current.value) return
-  await api(`/api/strategies/${current.value.id}`, {
-    method: 'PUT',
-    body: JSON.stringify({ enabled: !current.value.enabled }),
-  })
+  await api('/api/v1/strategy/update', { id: current.value.id, enabled: !current.value.enabled })
   await load()
 }
 
 async function remove() {
   if (!current.value || !window.confirm('删除这个策略？')) return
-  await api(`/api/strategies/${current.value.id}`, { method: 'DELETE' })
+  await api('/api/v1/strategy/delete', { id: current.value.id })
   currentId.value = 0
   report.value = null
   await load()
@@ -130,7 +128,7 @@ async function backtest() {
   error.value = ''
   message.value = ''
   try {
-    report.value = await api(`/api/strategies/${current.value.id}/backtest`, { method: 'POST' })
+    report.value = (await api('/api/v1/strategy/backtest', { id: current.value.id })).data
   } catch (err) {
     error.value = err.message
   } finally {
@@ -143,9 +141,9 @@ async function run(id) {
   error.value = ''
   try {
     const data = id
-      ? await api(`/api/strategies/${id}/run`, { method: 'POST' })
-      : await api('/api/strategies/run-enabled', { method: 'POST' })
-    message.value = id ? data.message : (data.items || []).map((item) => `${item.name}：${item.message}`).join('；')
+      ? await api('/api/v1/strategy/execute', { id })
+      : await api('/api/v1/strategy/executeEnabled', {})
+    message.value = id ? data.data.message : (data.data || []).map((item) => `${item.name}：${item.message}`).join('；')
     await Promise.all([load(), store.refreshAccount()])
   } catch (err) {
     error.value = err.message
@@ -158,11 +156,10 @@ async function place() {
   busy.value = 'order'
   error.value = ''
   try {
-    const order = await api('/api/orders', {
-      method: 'POST',
-      body: JSON.stringify({ code: manual.code, side: manual.side, qty: Number(manual.qty) }),
+    const order = await api('/api/v1/order/create', {
+      code: manual.code, side: manual.side, qty: Number(manual.qty),
     })
-    message.value = order.message
+    message.value = order.data.message
     await Promise.all([load(), store.refreshAccount()])
   } catch (err) {
     error.value = err.message
@@ -173,7 +170,7 @@ async function place() {
 
 async function reset() {
   if (!window.confirm('清空模拟持仓和委托，现金恢复到初始资金？策略会保留。')) return
-  await api('/api/account/reset', { method: 'POST' })
+  await api('/api/v1/account/reset', {})
   await Promise.all([load(), store.refreshAccount()])
   message.value = '模拟账户已重置'
 }

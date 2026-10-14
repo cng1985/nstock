@@ -10,6 +10,7 @@ type Config struct {
 	Addr            string
 	DBPath          string
 	WebDir          string
+	Token           string
 	MonitorInterval time.Duration
 }
 
@@ -22,6 +23,7 @@ func Load() Config {
 		Addr:            getenv("NSTOCK_ADDR", ":8080"),
 		DBPath:          getenv("NSTOCK_DB", "data/nstock.db"),
 		WebDir:          getenv("NSTOCK_WEB", "web/dist"),
+		Token:           os.Getenv("NSTOCK_TOKEN"),
 		MonitorInterval: time.Duration(sec) * time.Second,
 	}
 }

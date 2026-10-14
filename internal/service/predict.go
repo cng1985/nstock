@@ -41,13 +41,17 @@ func (s *Service) Predictions(code string, limit int) ([]PredictionView, error) 
 	if err := q.Find(&rows).Error; err != nil {
 		return nil, err
 	}
+	return predictionViews(rows), nil
+}
+
+func predictionViews(rows []model.Prediction) []PredictionView {
 	out := make([]PredictionView, 0, len(rows))
 	for _, row := range rows {
 		var reasons []predict.Reason
 		_ = json.Unmarshal([]byte(row.Reasons), &reasons)
 		out = append(out, PredictionView{Prediction: row, ReasonItems: reasons})
 	}
-	return out, nil
+	return out
 }
 
 func toPredict(rows []model.DailyBar) []predict.Bar {
