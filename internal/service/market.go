@@ -27,8 +27,10 @@ type WatchQuote struct {
 }
 
 type WatchList struct {
-	Items   []WatchQuote `json:"items"`
-	Warning string       `json:"warning,omitempty"`
+	Items    []WatchQuote `json:"items"`
+	Warning  string       `json:"warning,omitempty"`
+	Source   string       `json:"source,omitempty"`
+	Fallback bool         `json:"fallback,omitempty"`
 }
 
 type KlineView struct {
@@ -236,7 +238,24 @@ func (s *Service) WatchQuotes(ctx context.Context, refresh bool) (WatchList, err
 		}
 		out.Items = append(out.Items, row)
 	}
+	s.tagSource(&out)
 	return out, nil
+}
+
+func (s *Service) SourceStatus() market.SourceStatus {
+	if rep, ok := s.src.(market.Reporter); ok {
+		return rep.Status()
+	}
+	return market.SourceStatus{Name: market.SourceEastMoney, Label: market.SourceLabel(market.SourceEastMoney)}
+}
+
+func (s *Service) tagSource(out *WatchList) {
+	status := s.SourceStatus()
+	out.Source = status.Name
+	out.Fallback = status.Fallback
+	if status.Fallback && out.Warning == "" {
+		out.Warning = market.FallbackNotice
+	}
 }
 
 func (s *Service) Indices(ctx context.Context) ([]model.QuoteSnap, error) {

@@ -12,7 +12,7 @@ const nav = [
 ]
 
 async function refresh() {
-  await Promise.allSettled([store.refreshAccount(), store.refreshStatus()])
+  await Promise.allSettled([store.refreshAccount(), store.refreshStatus(), store.refreshSource()])
 }
 
 let timer
@@ -48,7 +48,7 @@ onBeforeUnmount(() => clearInterval(timer))
           <i></i>
           <span>{{ store.status.lastError ? '行情扫描异常' : '盯盘运行中' }}</span>
         </div>
-        <span>数据源 · 东方财富公开行情</span>
+        <span class="source" :class="{ fallback: store.source.fallback }">数据源 · {{ store.source.dataSourceName || '东方财富公开行情' }}</span>
         <span class="disclaimer">预测与交易均为研究模拟，不构成投资建议</span>
       </header>
       <RouterView />
