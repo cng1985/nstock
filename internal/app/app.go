@@ -2,6 +2,7 @@ package app
 
 import (
 	"nstock/internal/api"
+	"nstock/internal/auth"
 	"nstock/internal/config"
 	"nstock/internal/database"
 	"nstock/internal/market"
@@ -21,6 +22,7 @@ func Options() []fx.Option {
 	return []fx.Option{
 		config.Module,
 		database.Module,
+		auth.Module,
 		market.Module,
 		service.Module,
 		monitor.Module,

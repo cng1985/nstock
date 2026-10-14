@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import EquityChart from '../components/EquityChart.vue'
 import { api } from '../api'
+import { session } from '../auth'
 import { cls, kindLabel, num, pct, sideLabel, signalLabel, when } from '../format'
 import { store } from '../store'
 
@@ -49,14 +50,14 @@ function paramsOf(source) {
 }
 
 async function load() {
-  const [watch, list, blotter] = await Promise.all([
+  const [watch, list, blotter] = await Promise.allSettled([
     api('/api/v1/watch/list', {}),
     api('/api/v1/strategy/list', {}),
     api('/api/v1/order/search', { page: 1, size: 20 }),
   ])
-  watches.value = watch.data || []
-  strategies.value = list.data || []
-  orders.value = blotter.data || []
+  if (watch.status === 'fulfilled') watches.value = watch.value.data || []
+  if (list.status === 'fulfilled') strategies.value = list.value.data || []
+  if (blotter.status === 'fulfilled') orders.value = blotter.value.data || []
   if (!form.code && watches.value.length) form.code = watches.value[0].code
   if (!manual.code && watches.value.length) manual.code = watches.value[0].code
   if (!currentId.value && strategies.value.length) select(strategies.value[0])
@@ -186,8 +187,8 @@ onMounted(load)
         <p>回测和执行都在模拟账户里完成。成交价使用日线收盘或当前最新价，包含佣金和卖出印花税，只做多。</p>
       </div>
       <div class="actions">
-        <button :disabled="busy === 'run'" @click="run()">执行已启用策略</button>
-        <button class="danger" @click="reset">重置账户</button>
+        <button v-if="session.can('stock:strategy:execute')" :disabled="busy === 'run'" @click="run()">执行已启用策略</button>
+        <button v-if="session.can('stock:account:reset')" class="danger" @click="reset">重置账户</button>
       </div>
     </div>
     <p v-if="error" class="banner">{{ error }}</p>
@@ -195,7 +196,7 @@ onMounted(load)
 
     <div class="split">
       <div class="stack">
-        <article class="card form">
+        <article v-if="session.can('stock:strategy:create')" class="card form">
           <h2>新建策略</h2>
           <label>名称<input v-model="form.name" placeholder="可留空，自动命名" /></label>
           <label>类型
@@ -244,11 +245,11 @@ onMounted(load)
           </div>
           <p class="note">{{ current.lastMessage || '尚未执行' }} <span v-if="current.lastRunAt">· {{ when(current.lastRunAt) }}</span></p>
           <div class="actions">
-            <button @click="toggle">{{ current.enabled ? '停用' : '启用' }}</button>
-            <button :disabled="busy === 'save'" @click="saveParams">保存参数</button>
-            <button :disabled="busy === 'backtest'" @click="backtest">回测</button>
-            <button class="primary" :disabled="busy === 'run'" @click="run(current.id)">执行一次</button>
-            <button class="danger" @click="remove">删除</button>
+            <button v-if="session.can('stock:strategy:update')" @click="toggle">{{ current.enabled ? '停用' : '启用' }}</button>
+            <button v-if="session.can('stock:strategy:update')" :disabled="busy === 'save'" @click="saveParams">保存参数</button>
+            <button v-if="session.can('stock:strategy:backtest')" :disabled="busy === 'backtest'" @click="backtest">回测</button>
+            <button v-if="session.can('stock:strategy:execute')" class="primary" :disabled="busy === 'run'" @click="run(current.id)">执行一次</button>
+            <button v-if="session.can('stock:strategy:delete')" class="danger" @click="remove">删除</button>
           </div>
           <template v-if="report">
             <div class="kvs">
@@ -261,7 +262,7 @@ onMounted(load)
             <EquityChart v-if="report.curve?.length" :curve="report.curve" />
           </template>
         </article>
-        <article class="card form">
+        <article v-if="session.can('stock:order:create')" class="card form">
           <h2>手动模拟单</h2>
           <div class="form inline">
             <label>证券<input v-model="manual.code" list="codes" /></label>

@@ -150,7 +150,7 @@ func (s *Server) runQuery(c *gin.Context, kind string) {
 		ncode.Write(c.Writer, ncode.Fail(ncode.CodeBadRequest, "查询模型与接口不匹配"), nil)
 		return
 	}
-	if err = ncode.Authorize(c.GetHeader("Authorization"), s.cfg.Token, model.Permission); err != nil {
+	if err = s.authorize(c, model.Permission); err != nil {
 		ncode.Write(c.Writer, err, nil)
 		return
 	}

@@ -40,5 +40,21 @@ func Migrate(db *gorm.DB) error {
 		&model.Backtest{},
 		&model.AlertRule{},
 		&model.AlertEvent{},
+		&model.User{},
+		&model.Role{},
+		&model.Permission{},
+		&model.UserRole{},
+		&model.RolePermission{},
+		&model.Session{},
 	)
+}
+
+// Schema 表示表结构已经迁移完成，供种子数据在灌库前等待。
+type Schema struct{}
+
+func Prepare(db *gorm.DB) (Schema, error) {
+	if err := Migrate(db); err != nil {
+		return Schema{}, err
+	}
+	return Schema{}, nil
 }

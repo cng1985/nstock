@@ -147,3 +147,47 @@ type AlertEvent struct {
 	Price     float64   `json:"price"`
 	CreatedAt time.Time `json:"createdAt"`
 }
+
+type User struct {
+	ID           uint      `json:"id" gorm:"primaryKey"`
+	Username     string    `json:"username" gorm:"uniqueIndex;size:64"`
+	DisplayName  string    `json:"displayName" gorm:"size:64"`
+	PasswordHash string    `json:"-" gorm:"size:128"`
+	Enabled      bool      `json:"enabled"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+type Role struct {
+	ID          uint      `json:"id" gorm:"primaryKey"`
+	Code        string    `json:"code" gorm:"uniqueIndex;size:64"`
+	Name        string    `json:"name" gorm:"size:64"`
+	Description string    `json:"description" gorm:"size:200"`
+	BuiltIn     bool      `json:"builtIn"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type Permission struct {
+	Code      string `json:"code" gorm:"primaryKey;size:64"`
+	Name      string `json:"name"`
+	GroupName string `json:"group" gorm:"column:group_name;size:32"`
+}
+
+type UserRole struct {
+	UserID uint `gorm:"primaryKey"`
+	RoleID uint `gorm:"primaryKey"`
+}
+
+type RolePermission struct {
+	RoleID uint   `gorm:"primaryKey"`
+	Code   string `gorm:"primaryKey;size:64"`
+}
+
+type Session struct {
+	ID        uint      `json:"id" gorm:"primaryKey"`
+	TokenHash string    `json:"-" gorm:"uniqueIndex;size:64"`
+	UserID    uint      `json:"userId" gorm:"index"`
+	ExpiresAt time.Time `json:"expiresAt" gorm:"index"`
+	CreatedAt time.Time `json:"createdAt"`
+}

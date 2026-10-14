@@ -10,6 +10,7 @@
 - 预测：均线、MACD、RSI、短期动量、量能，输出下一交易日方向和置信度
 - 量化：双均线、RSI 回归、动量突破；历史回测和模拟成交
 - 盯盘：价格和涨跌幅条件，后台定时扫描，触发后写入提醒
+- 登录和 RBAC：用户、角色、权限。菜单和按钮按权限显示，接口再校验一次
 
 模拟成交按 100 股一手。买入收佣金（万 2.5，最低 5 元），卖出另计 0.05% 印花税。策略只做多。
 
@@ -60,7 +61,19 @@ POST /api/v1/query/search
 {"model":"pageForOrder","page":1,"size":20,"filters":{"code":"600519"}}
 ```
 
-查询条件只接受模型白名单，不会拼进 SQL。请求里不能带 `tenantId`。设置 `NSTOCK_TOKEN` 后，调用需要 `Authorization: Bearer <token>`。
+查询条件只接受模型白名单，不会拼进 SQL。请求里不能带 `tenantId`。除 `POST /api/v1/auth/login` 外，请求都要带登录会话：`Authorization: Bearer <token>`。会话默认 7 天。若设置了 `NSTOCK_TOKEN`，这个静态令牌仍可访问全部接口，普通登录会话继续按角色限制。
+
+登录返回 token、角色和权限码。当前用户用 `POST /api/v1/auth/me`，退出用 `POST /api/v1/auth/logout`，修改自己的密码用 `POST /api/v1/auth/password`。用户、角色和权限目录分别是 `/api/v1/user/*`、`/api/v1/role/*`、`/api/v1/permission/list`。
+
+内置角色：
+
+| 角色 | 范围 |
+| --- | --- |
+| 管理员 | 全部权限，包括用户和角色。不能取消全部权限，也不能停用或删除最后一名启用的管理员 |
+| 交易员 | 行情、预测、模拟下单、策略和盯盘。不能重置账户，也不能管理用户 |
+| 研究员 | 查看行情、账户、委托、策略和盯盘，可以生成预测。不能下单或改规则 |
+
+只有管理员角色可以分配、修改或删除管理员。权限页可以新建自定义角色，并勾选权限码。
 
 ## 配置
 
@@ -71,7 +84,7 @@ POST /api/v1/query/search
 | `NSTOCK_WEB` | `web/dist` | 若该目录有 `index.html` 则用它，否则用嵌进二进制的前端 |
 | `NSTOCK_MONITOR_INTERVAL` | `20` | 盯盘间隔，秒，最小 5 |
 | `NSTOCK_GIN` | 空 | 设为 `debug` 时打开 Gin 调试日志 |
-| `NSTOCK_TOKEN` | 空 | 非空时要求 Bearer 认证 |
+| `NSTOCK_TOKEN` | 空 | 非空时，该静态 Bearer 令牌拥有全部权限 |
 
 SQLite 通过 GORM 使用纯 Go 驱动 [glebarez/sqlite](https://github.com/glebarez/sqlite)，不依赖 CGO。
 
