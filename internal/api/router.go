@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -14,6 +16,7 @@ import (
 	"nstock/internal/monitor"
 	"nstock/internal/ncode"
 	"nstock/internal/service"
+	"nstock/web"
 
 	"github.com/gin-gonic/gin"
 )
@@ -73,21 +76,67 @@ func NewEngine(svc *service.Service, runner *monitor.Runner, cfg config.Config) 
 
 func (s *Server) pages(engine *gin.Engine) {
 	index := filepath.Join(s.cfg.WebDir, "index.html")
-	if _, err := os.Stat(index); err != nil {
-		engine.GET("/", func(c *gin.Context) {
-			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte("<!doctype html><meta charset=utf-8><p>前端还没有构建。请在 web 目录执行 npm install 和 npm run build。</p>"))
-		})
+	if st, err := os.Stat(index); err == nil && !st.IsDir() {
+		s.pagesDir(engine, index)
 		return
 	}
+	s.pagesEmbed(engine)
+}
+
+func (s *Server) pagesDir(engine *gin.Engine, index string) {
 	engine.Static("/assets", filepath.Join(s.cfg.WebDir, "assets"))
 	engine.GET("/", func(c *gin.Context) { c.File(index) })
 	engine.NoRoute(func(c *gin.Context) {
-		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
-			ncode.Write(c.Writer, ncode.Fail(ncode.CodeNotFound, "接口不存在"), nil)
+		if apiMissing(c) {
 			return
 		}
 		c.File(index)
 	})
+}
+
+func (s *Server) pagesEmbed(engine *gin.Engine) {
+	dist, err := fs.Sub(web.Dist, "dist")
+	if err != nil {
+		s.pagesMissing(engine)
+		return
+	}
+	index, err := fs.ReadFile(dist, "index.html")
+	if err != nil {
+		s.pagesMissing(engine)
+		return
+	}
+	files := http.FileServer(http.FS(dist))
+	engine.NoRoute(func(c *gin.Context) {
+		if apiMissing(c) {
+			return
+		}
+		name := strings.TrimPrefix(path.Clean(c.Request.URL.Path), "/")
+		if name != "" && name != "." {
+			if info, err := fs.Stat(dist, name); err == nil && !info.IsDir() {
+				files.ServeHTTP(c.Writer, c.Request)
+				return
+			}
+			if strings.HasPrefix(name, "assets/") || path.Ext(name) != "" {
+				c.Status(http.StatusNotFound)
+				return
+			}
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", index)
+	})
+}
+
+func (s *Server) pagesMissing(engine *gin.Engine) {
+	engine.GET("/", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte("<!doctype html><meta charset=utf-8><p>前端还没有构建。请在 web 目录执行 npm install 和 npm run build。</p>"))
+	})
+}
+
+func apiMissing(c *gin.Context) bool {
+	if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+		ncode.Write(c.Writer, ncode.Fail(ncode.CodeNotFound, "接口不存在"), nil)
+		return true
+	}
+	return false
 }
 
 func cors() gin.HandlerFunc {
