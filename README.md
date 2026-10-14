@@ -49,9 +49,13 @@ SQLite 通过 GORM 使用纯 Go 驱动 [glebarez/sqlite](https://github.com/gleb
 
 ## 结构
 
-- `cmd/server` 启动 Fx 应用
+启动入口只组装 Fx 模块，每个包用 `var Module` 声明自己的依赖和生命周期：
+
+- `internal/config` 配置
+- `internal/database` SQLite 与迁移
 - `internal/market` 东方财富行情
-- `internal/predict` 预测打分
-- `internal/quant` 回测和仓位计算
-- `internal/service` 自选、模拟账户、策略、盯盘
+- `internal/service` 自选、预测、模拟账户和策略
+- `internal/monitor` 盯盘循环
+- `internal/api` HTTP 服务
+- `internal/predict`、`internal/quant` 纯计算，不进入依赖注入
 - `web` Vue 3 界面
