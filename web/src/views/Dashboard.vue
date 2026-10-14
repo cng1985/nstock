@@ -17,17 +17,17 @@ async function load() {
   loading.value = true
   error.value = ''
   const [idx, list, ev, pred] = await Promise.allSettled([
-    api('/api/market/indices'),
-    api('/api/market/quotes?refresh=1'),
-    api('/api/alert-events?limit=6'),
-    api('/api/predict?limit=6'),
+    api('/api/v1/market/indices', {}),
+    api('/api/v1/quote/list', { refresh: true }),
+    api('/api/v1/alertEvent/search', { page: 1, size: 6 }),
+    api('/api/v1/predict/search', { page: 1, size: 6 }),
   ])
-  if (idx.status === 'fulfilled') indices.value = idx.value.items || []
+  if (idx.status === 'fulfilled') indices.value = idx.value.data || []
   else error.value = idx.reason.message
-  if (list.status === 'fulfilled') quotes.value = list.value
+  if (list.status === 'fulfilled') quotes.value = list.value.data
   else if (!error.value) error.value = list.reason.message
-  if (ev.status === 'fulfilled') events.value = ev.value.items || []
-  if (pred.status === 'fulfilled') predictions.value = pred.value.items || []
+  if (ev.status === 'fulfilled') events.value = ev.value.data || []
+  if (pred.status === 'fulfilled') predictions.value = pred.value.data || []
   loading.value = false
 }
 

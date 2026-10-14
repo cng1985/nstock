@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -110,53 +109,80 @@ func call(h http.Handler, method, path string, body any) *httptest.ResponseRecor
 	return rec
 }
 
+func envelopeData(t *testing.T, rec *httptest.ResponseRecorder) json.RawMessage {
+	t.Helper()
+	var body struct {
+		Code int             `json:"code"`
+		Msg  string          `json:"msg"`
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json %s", rec.Body.String())
+	}
+	if body.Code != 200 {
+		t.Fatalf("code %d %s", body.Code, rec.Body.String())
+	}
+	return body.Data
+}
+
 func TestPaperTradePredictAndMonitor(t *testing.T) {
 	h := testEngine(t)
-	if rec := call(h, http.MethodGet, "/api/health", nil); rec.Code != 200 {
-		t.Fatalf("health %d", rec.Code)
+	rec := call(h, http.MethodGet, "/api/v1/system/health", nil)
+	if rec.Code == 200 {
+		t.Fatal("business api must not use GET")
 	}
 
-	rec := call(h, http.MethodPost, "/api/watchlist", map[string]string{"code": "600000"})
+	rec = call(h, http.MethodPost, "/api/v1/system/health", map[string]any{})
+	if rec.Code != 200 {
+		t.Fatalf("health %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec = call(h, http.MethodPost, "/api/v1/watch/create", map[string]any{"tenantId": 1, "code": "600000"})
+	if rec.Code == 200 {
+		t.Fatal("client tenantId must be rejected")
+	}
+
+	rec = call(h, http.MethodPost, "/api/v1/watch/create", map[string]string{"code": "600000"})
 	if rec.Code != 200 {
 		t.Fatalf("watch %d %s", rec.Code, rec.Body.String())
 	}
 
-	rec = call(h, http.MethodPost, "/api/orders", map[string]any{"code": "600000", "side": "buy", "qty": 100})
+	rec = call(h, http.MethodPost, "/api/v1/order/create", map[string]any{"code": "600000", "side": "buy", "qty": 100})
 	if rec.Code != 200 {
 		t.Fatalf("buy %d %s", rec.Code, rec.Body.String())
 	}
-	rec = call(h, http.MethodPost, "/api/orders", map[string]any{"code": "600000", "side": "buy", "qty": 50})
+	rec = call(h, http.MethodPost, "/api/v1/order/create", map[string]any{"code": "600000", "side": "buy", "qty": 50})
 	if rec.Code == 200 {
 		t.Fatal("odd lot should fail")
 	}
 
-	rec = call(h, http.MethodGet, "/api/account", nil)
+	rec = call(h, http.MethodPost, "/api/v1/account/get", map[string]any{})
 	var account struct {
 		Cash      float64 `json:"cash"`
 		Positions []struct {
 			Qty int `json:"qty"`
 		} `json:"positions"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &account); err != nil || len(account.Positions) != 1 || account.Positions[0].Qty != 100 {
+	if err := json.Unmarshal(envelopeData(t, rec), &account); err != nil || len(account.Positions) != 1 || account.Positions[0].Qty != 100 {
 		t.Fatalf("account %s", rec.Body.String())
 	}
 	if account.Cash >= 1_000_000 {
 		t.Fatalf("cash not reduced: %v", account.Cash)
 	}
 
-	rec = call(h, http.MethodPost, "/api/predict/600519", nil)
+	rec = call(h, http.MethodPost, "/api/v1/predict/execute", map[string]string{"code": "600519"})
 	if rec.Code != 200 {
 		t.Fatalf("predict %d %s", rec.Code, rec.Body.String())
 	}
 	var prediction struct {
 		Direction string `json:"direction"`
 	}
-	_ = json.Unmarshal(rec.Body.Bytes(), &prediction)
+	_ = json.Unmarshal(envelopeData(t, rec), &prediction)
 	if prediction.Direction != "up" {
 		t.Fatalf("direction %s", rec.Body.String())
 	}
 
-	rec = call(h, http.MethodPost, "/api/strategies", map[string]any{
+	rec = call(h, http.MethodPost, "/api/v1/strategy/create", map[string]any{
 		"type": "ma_cross", "code": "600519",
 		"params": map[string]any{"fast": 5, "slow": 20, "positionPct": 0.2},
 	})
@@ -166,31 +192,54 @@ func TestPaperTradePredictAndMonitor(t *testing.T) {
 	var strategy struct {
 		ID uint `json:"id"`
 	}
-	_ = json.Unmarshal(rec.Body.Bytes(), &strategy)
-	rec = call(h, http.MethodPost, fmt.Sprintf("/api/strategies/%d/backtest", strategy.ID), nil)
+	_ = json.Unmarshal(envelopeData(t, rec), &strategy)
+	rec = call(h, http.MethodPost, "/api/v1/strategy/backtest", map[string]any{"id": strategy.ID})
 	if rec.Code != 200 {
 		t.Fatalf("backtest %d %s", rec.Code, rec.Body.String())
 	}
 
-	rec = call(h, http.MethodPost, "/api/alerts", map[string]any{"code": "600519", "kind": "price_above", "threshold": 1})
+	rec = call(h, http.MethodPost, "/api/v1/query/search", map[string]any{
+		"model": "pageForOrder", "page": 1, "size": 20,
+		"filters": map[string]any{"code": "600000"},
+	})
+	var page struct {
+		ResponseType string `json:"responseType"`
+		Total        int64  `json:"total"`
+		Data         []struct {
+			StateName string `json:"stateName"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil || page.ResponseType != "page" || page.Total < 1 || page.Data[0].StateName == "" {
+		t.Fatalf("query %s", rec.Body.String())
+	}
+
+	rec = call(h, http.MethodPost, "/api/v1/query/search", map[string]any{
+		"model":   "pageForOrder",
+		"filters": map[string]any{"tenantId": 1},
+	})
+	if rec.Code == 200 {
+		t.Fatal("query tenant filter must be rejected")
+	}
+
+	rec = call(h, http.MethodPost, "/api/v1/alert/create", map[string]any{"code": "600519", "kind": "price_above", "threshold": 1})
 	if rec.Code != 200 {
 		t.Fatalf("alert %d %s", rec.Code, rec.Body.String())
 	}
-	rec = call(h, http.MethodPost, "/api/monitor/scan", nil)
+	rec = call(h, http.MethodPost, "/api/v1/monitor/scan", map[string]any{})
 	var scan struct {
 		Fired int `json:"fired"`
 	}
-	_ = json.Unmarshal(rec.Body.Bytes(), &scan)
+	_ = json.Unmarshal(envelopeData(t, rec), &scan)
 	if rec.Code != 200 || scan.Fired != 1 {
 		t.Fatalf("scan %d %s", rec.Code, rec.Body.String())
 	}
-	rec = call(h, http.MethodPost, "/api/monitor/scan", nil)
-	_ = json.Unmarshal(rec.Body.Bytes(), &scan)
+	rec = call(h, http.MethodPost, "/api/v1/monitor/scan", map[string]any{})
+	_ = json.Unmarshal(envelopeData(t, rec), &scan)
 	if scan.Fired != 0 {
 		t.Fatalf("latched scan fired again: %s", rec.Body.String())
 	}
 
-	rec = call(h, http.MethodPost, "/api/orders", map[string]any{"code": "600000", "side": "sell", "qty": 100})
+	rec = call(h, http.MethodPost, "/api/v1/order/create", map[string]any{"code": "600000", "side": "sell", "qty": 100})
 	if rec.Code != 200 {
 		t.Fatalf("sell %d %s", rec.Code, rec.Body.String())
 	}

@@ -13,7 +13,8 @@ const searching = ref(false)
 let timer
 
 async function load() {
-  quotes.value = await api('/api/market/quotes?refresh=1')
+  const res = await api('/api/v1/quote/list', { refresh: true })
+  quotes.value = res.data
 }
 
 async function search() {
@@ -24,8 +25,8 @@ async function search() {
   searching.value = true
   error.value = ''
   try {
-    const data = await api(`/api/market/search?q=${encodeURIComponent(query.value.trim())}`)
-    hits.value = data.items || []
+    const data = await api('/api/v1/market/search', { keyword: query.value.trim() })
+    hits.value = data.data || []
   } catch (err) {
     error.value = err.message
   } finally {
@@ -41,7 +42,7 @@ function schedule() {
 async function add(code) {
   error.value = ''
   try {
-    await api('/api/watchlist', { method: 'POST', body: JSON.stringify({ code }) })
+    await api('/api/v1/watch/create', { code })
     await load()
   } catch (err) {
     error.value = err.message
@@ -50,7 +51,7 @@ async function add(code) {
 
 async function remove(code) {
   if (!window.confirm(`从自选移除 ${code}？`)) return
-  await api(`/api/watchlist/${code}`, { method: 'DELETE' })
+  await api('/api/v1/watch/delete', { code })
   await load()
 }
 

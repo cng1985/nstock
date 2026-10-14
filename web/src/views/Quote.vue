@@ -26,23 +26,23 @@ async function load() {
   message.value = ''
   prediction.value = null
   const [q, k, w] = await Promise.allSettled([
-    api(`/api/market/quote/${code.value}?refresh=1`),
-    api(`/api/market/kline/${code.value}?limit=180`),
-    api('/api/watchlist'),
+    api('/api/v1/quote/get', { code: code.value, refresh: true }),
+    api('/api/v1/kline/get', { code: code.value, size: 180 }),
+    api('/api/v1/watch/list', {}),
   ])
-  if (q.status === 'fulfilled') quote.value = q.value
+  if (q.status === 'fulfilled') quote.value = q.value.data
   else error.value = q.reason.message
-  if (k.status === 'fulfilled') kline.value = k.value
+  if (k.status === 'fulfilled') kline.value = k.value.data
   else if (!error.value) error.value = k.reason.message
-  if (w.status === 'fulfilled') watches.value = w.value.items || []
+  if (w.status === 'fulfilled') watches.value = w.value.data || []
   if (!alertThreshold.value && quote.value?.price) alertThreshold.value = quote.value.price
 }
 
 async function toggleWatch() {
   if (watched.value) {
-    await api(`/api/watchlist/${code.value}`, { method: 'DELETE' })
+    await api('/api/v1/watch/delete', { code: code.value })
   } else {
-    await api('/api/watchlist', { method: 'POST', body: JSON.stringify({ code: code.value }) })
+    await api('/api/v1/watch/create', { code: code.value })
   }
   await load()
 }
@@ -51,7 +51,7 @@ async function predict() {
   busy.value = 'predict'
   error.value = ''
   try {
-    prediction.value = await api(`/api/predict/${code.value}`, { method: 'POST' })
+    prediction.value = (await api('/api/v1/predict/execute', { code: code.value })).data
   } catch (err) {
     error.value = err.message
   } finally {
@@ -64,10 +64,9 @@ async function trade(side) {
   error.value = ''
   message.value = ''
   try {
-    const order = await api('/api/orders', {
-      method: 'POST',
-      body: JSON.stringify({ code: code.value, side, qty: Number(qty.value) }),
-    })
+    const order = (await api('/api/v1/order/create', {
+      code: code.value, side, qty: Number(qty.value),
+    })).data
     message.value = `${order.message}，价格 ${num(order.price)}`
     await store.refreshAccount()
   } catch (err) {
@@ -81,9 +80,8 @@ async function createAlert() {
   busy.value = 'alert'
   error.value = ''
   try {
-    await api('/api/alerts', {
-      method: 'POST',
-      body: JSON.stringify({ code: code.value, kind: alertKind.value, threshold: Number(alertThreshold.value) }),
+    await api('/api/v1/alert/create', {
+      code: code.value, kind: alertKind.value, threshold: Number(alertThreshold.value),
     })
     message.value = '盯盘条件已保存'
   } catch (err) {

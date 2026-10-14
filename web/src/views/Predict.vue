@@ -11,13 +11,13 @@ const error = ref('')
 const loading = ref(false)
 
 async function loadHistory() {
-  const data = await api(`/api/predict?limit=12${code.value ? `&code=${code.value}` : ''}`)
-  history.value = data.items || []
+  const data = await api('/api/v1/predict/search', { code: code.value, page: 1, size: 12 })
+  history.value = data.data || []
 }
 
 async function load() {
-  const data = await api('/api/watchlist')
-  watches.value = data.items || []
+  const data = await api('/api/v1/watch/list', {})
+  watches.value = data.data || []
   if (!code.value && watches.value.length) code.value = watches.value[0].code
   await loadHistory()
 }
@@ -27,7 +27,7 @@ async function run() {
   loading.value = true
   error.value = ''
   try {
-    result.value = await api(`/api/predict/${code.value}`, { method: 'POST' })
+    result.value = (await api('/api/v1/predict/execute', { code: code.value })).data
     await loadHistory()
   } catch (err) {
     error.value = err.message

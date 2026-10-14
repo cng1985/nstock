@@ -35,6 +35,23 @@ cd web && npm run dev
 go test ./...
 ```
 
+## 接口
+
+业务接口统一为 `POST /api/v1/{资源}/{动作}`，请求体是 JSON，响应固定为：
+
+```json
+{"code":200,"msg":"success","data":{}}
+```
+
+分页接口额外返回 `page`、`size`、`total`、`totalPage` 和 `responseType: "page"`。列表、单条和分页也可以走统一查询：
+
+```json
+POST /api/v1/query/search
+{"model":"pageForOrder","page":1,"size":20,"filters":{"code":"600519"}}
+```
+
+查询条件只接受模型白名单，不会拼进 SQL。请求里不能带 `tenantId`。设置 `NSTOCK_TOKEN` 后，调用需要 `Authorization: Bearer <token>`。
+
 ## 配置
 
 | 环境变量 | 默认 | 说明 |
@@ -44,6 +61,7 @@ go test ./...
 | `NSTOCK_WEB` | `web/dist` | 前端构建目录 |
 | `NSTOCK_MONITOR_INTERVAL` | `20` | 盯盘间隔，秒，最小 5 |
 | `NSTOCK_GIN` | 空 | 设为 `debug` 时打开 Gin 调试日志 |
+| `NSTOCK_TOKEN` | 空 | 非空时要求 Bearer 认证 |
 
 SQLite 通过 GORM 使用纯 Go 驱动 [glebarez/sqlite](https://github.com/glebarez/sqlite)，不依赖 CGO。
 

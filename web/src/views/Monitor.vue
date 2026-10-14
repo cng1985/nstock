@@ -14,13 +14,13 @@ const form = reactive({ code: '', kind: 'price_above', threshold: 0, name: '' })
 
 async function load() {
   const [watch, ruleData, eventData] = await Promise.all([
-    api('/api/watchlist'),
-    api('/api/alerts'),
-    api('/api/alert-events?limit=30'),
+    api('/api/v1/watch/list', {}),
+    api('/api/v1/alert/list', {}),
+    api('/api/v1/alertEvent/search', { page: 1, size: 30 }),
   ])
-  watches.value = watch.items || []
-  rules.value = ruleData.items || []
-  events.value = eventData.items || []
+  watches.value = watch.data || []
+  rules.value = ruleData.data || []
+  events.value = eventData.data || []
   if (!form.code && watches.value.length) form.code = watches.value[0].code
   await store.refreshStatus()
 }
@@ -29,14 +29,11 @@ async function create() {
   error.value = ''
   message.value = ''
   try {
-    await api('/api/alerts', {
-      method: 'POST',
-      body: JSON.stringify({
-        code: form.code,
-        kind: form.kind,
-        threshold: Number(form.threshold),
-        name: form.name,
-      }),
+    await api('/api/v1/alert/create', {
+      code: form.code,
+      kind: form.kind,
+      threshold: Number(form.threshold),
+      name: form.name,
     })
     form.name = ''
     message.value = '盯盘条件已添加'
@@ -47,13 +44,13 @@ async function create() {
 }
 
 async function toggle(rule) {
-  await api(`/api/alerts/${rule.id}`, { method: 'PUT', body: JSON.stringify({ enabled: !rule.enabled }) })
+  await api('/api/v1/alert/update', { id: rule.id, enabled: !rule.enabled })
   await load()
 }
 
 async function remove(rule) {
   if (!window.confirm(`删除「${rule.name}」？`)) return
-  await api(`/api/alerts/${rule.id}`, { method: 'DELETE' })
+  await api('/api/v1/alert/delete', { id: rule.id })
   await load()
 }
 
@@ -61,8 +58,8 @@ async function scan() {
   busy.value = true
   error.value = ''
   try {
-    const result = await api('/api/monitor/scan', { method: 'POST' })
-    message.value = `已检查 ${result.checked} 条，新触发 ${result.fired} 条`
+    const result = await api('/api/v1/monitor/scan', {})
+    message.value = `已检查 ${result.data.checked} 条，新触发 ${result.data.fired} 条`
     await load()
   } catch (err) {
     error.value = err.message
