@@ -1,0 +1,6 @@
+/data/
+*.db
+*.db-journal
+web/node_modules/
+web/dist/
+.DS_Store

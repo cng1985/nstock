@@ -1,0 +1,113 @@
+<script setup>
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { api } from '../api'
+import { cls, marketLabel, num, pct } from '../format'
+
+const router = useRouter()
+const query = ref('')
+const hits = ref([])
+const quotes = ref({ items: [] })
+const error = ref('')
+const searching = ref(false)
+let timer
+
+async function load() {
+  quotes.value = await api('/api/market/quotes?refresh=1')
+}
+
+async function search() {
+  if (!query.value.trim()) {
+    hits.value = []
+    return
+  }
+  searching.value = true
+  error.value = ''
+  try {
+    const data = await api(`/api/market/search?q=${encodeURIComponent(query.value.trim())}`)
+    hits.value = data.items || []
+  } catch (err) {
+    error.value = err.message
+  } finally {
+    searching.value = false
+  }
+}
+
+function schedule() {
+  clearTimeout(timer)
+  timer = setTimeout(search, 280)
+}
+
+async function add(code) {
+  error.value = ''
+  try {
+    await api('/api/watchlist', { method: 'POST', body: JSON.stringify({ code }) })
+    await load()
+  } catch (err) {
+    error.value = err.message
+  }
+}
+
+async function remove(code) {
+  if (!window.confirm(`从自选移除 ${code}？`)) return
+  await api(`/api/watchlist/${code}`, { method: 'DELETE' })
+  await load()
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <section class="page">
+    <div class="page-head">
+      <div>
+        <h1>行情</h1>
+        <p>搜索沪深京 A 股，加入自选后会同步日线。</p>
+      </div>
+    </div>
+    <p v-if="error" class="banner">{{ error }}</p>
+    <p v-if="quotes.warning" class="banner warn">{{ quotes.warning }}</p>
+    <article class="card">
+      <label>代码或名称
+        <input v-model="query" placeholder="例如 600519 或 茅台" @input="schedule" @keyup.enter="search" />
+      </label>
+      <p v-if="searching" class="muted">正在搜索…</p>
+      <table v-if="hits.length">
+        <tbody>
+          <tr v-for="hit in hits" :key="hit.secId">
+            <td>{{ hit.name }} <span class="muted">{{ marketLabel(hit.market) }} {{ hit.code }}</span></td>
+            <td class="muted">{{ hit.kindName }}</td>
+            <td class="right">
+              <button class="ghost" @click="router.push(`/quote/${hit.code}`)">查看</button>
+              <button class="primary" @click="add(hit.code)">加入自选</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </article>
+    <article class="card">
+      <h2>自选列表</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>证券</th>
+            <th class="right">最新</th>
+            <th class="right">涨跌幅</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in quotes.items" :key="item.code">
+            <td>{{ item.name }} <span class="muted">{{ marketLabel(item.market) }} {{ item.code }}</span></td>
+            <td class="num" :class="cls(item.quote?.changePct)">{{ num(item.quote?.price) }}</td>
+            <td class="num" :class="cls(item.quote?.changePct)">{{ pct(item.quote?.changePct) }}</td>
+            <td class="right">
+              <button class="ghost" @click="router.push(`/quote/${item.code}`)">详情</button>
+              <button class="danger" @click="remove(item.code)">移除</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </article>
+  </section>
+</template>
