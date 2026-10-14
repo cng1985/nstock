@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { api } from '../api'
+import { session } from '../auth'
 import { cls, dirLabel, num, when } from '../format'
 
 const watches = ref([])
@@ -16,10 +17,18 @@ async function loadHistory() {
 }
 
 async function load() {
-  const data = await api('/api/v1/watch/list', {})
-  watches.value = data.data || []
-  if (!code.value && watches.value.length) code.value = watches.value[0].code
-  await loadHistory()
+  try {
+    const data = await api('/api/v1/watch/list', {})
+    watches.value = data.data || []
+    if (!code.value && watches.value.length) code.value = watches.value[0].code
+  } catch (err) {
+    error.value = err.message
+  }
+  try {
+    await loadHistory()
+  } catch (err) {
+    if (!error.value) error.value = err.message
+  }
 }
 
 async function run() {
@@ -52,7 +61,7 @@ onMounted(load)
         <h1>涨跌预测</h1>
         <p>用均线、MACD、RSI、5 日动量和量能打分，给出下一交易日的方向倾向。这是技术信号，不是收益承诺。</p>
       </div>
-      <button class="primary" :disabled="loading || !code" @click="run">{{ loading ? '计算中' : '生成预测' }}</button>
+      <button v-if="session.can('stock:predict:execute')" class="primary" :disabled="loading || !code" @click="run">{{ loading ? '计算中' : '生成预测' }}</button>
     </div>
     <p v-if="error" class="banner">{{ error }}</p>
     <div class="chips">

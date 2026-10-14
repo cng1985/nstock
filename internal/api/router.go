@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"nstock/internal/auth"
 	"nstock/internal/config"
 	"nstock/internal/monitor"
 	"nstock/internal/ncode"
@@ -18,22 +19,38 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const principalKey = "authPrincipal"
+
 type Server struct {
-	svc    *service.Service
-	runner *monitor.Runner
-	cfg    config.Config
-	models map[string]queryModel
+	svc      *service.Service
+	runner   *monitor.Runner
+	cfg      config.Config
+	models   map[string]queryModel
+	identity *auth.Service
 }
 
-func NewEngine(svc *service.Service, runner *monitor.Runner, cfg config.Config) *gin.Engine {
+func NewEngine(svc *service.Service, runner *monitor.Runner, cfg config.Config, identity *auth.Service) *gin.Engine {
 	if os.Getenv("NSTOCK_GIN") != "debug" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	engine := gin.New()
 	engine.Use(gin.Recovery(), cors())
-	server := &Server{svc: svc, runner: runner, cfg: cfg}
+	server := &Server{svc: svc, runner: runner, cfg: cfg, identity: identity}
 	server.models = server.queryModels()
 	v1 := engine.Group("/api/v1")
+	v1.POST("/auth/login", server.login)
+	v1.POST("/auth/logout", server.logout)
+	v1.POST("/auth/me", server.me)
+	v1.POST("/auth/password", server.password)
+	v1.POST("/user/list", server.userList)
+	v1.POST("/user/create", server.userCreate)
+	v1.POST("/user/update", server.userUpdate)
+	v1.POST("/user/delete", server.userDelete)
+	v1.POST("/role/list", server.roleList)
+	v1.POST("/role/create", server.roleCreate)
+	v1.POST("/role/update", server.roleUpdate)
+	v1.POST("/role/delete", server.roleDelete)
+	v1.POST("/permission/list", server.permissionList)
 	v1.POST("/system/health", server.health)
 	v1.POST("/market/search", server.search)
 	v1.POST("/market/indices", server.indices)
@@ -129,7 +146,7 @@ func (s *Server) prepare(c *gin.Context, permission string, dest any) ([]byte, e
 	if err = ncode.CheckTenant(raw); err != nil {
 		return nil, err
 	}
-	if err = ncode.Authorize(c.GetHeader("Authorization"), s.cfg.Token, permission); err != nil {
+	if err = s.authorize(c, permission); err != nil {
 		return nil, err
 	}
 	if err = bind(raw, dest); err != nil {
@@ -138,11 +155,67 @@ func (s *Server) prepare(c *gin.Context, permission string, dest any) ([]byte, e
 	return raw, nil
 }
 
+func (s *Server) prepareAny(c *gin.Context, permissions []string, dest any) ([]byte, error) {
+	raw, err := readBody(c)
+	if err != nil {
+		return nil, err
+	}
+	if err = ncode.CheckTenant(raw); err != nil {
+		return nil, err
+	}
+	if err = s.authorizeAny(c, permissions...); err != nil {
+		return nil, err
+	}
+	if err = bind(raw, dest); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
+func (s *Server) handleAny(c *gin.Context, permissions []string, dest any, fn func(context.Context) (any, error)) {
+	if _, err := s.prepareAny(c, permissions, dest); err != nil {
+		ncode.Write(c.Writer, err, nil)
+		return
+	}
+	data, err := fn(c.Request.Context())
+	ncode.Write(c.Writer, err, data)
+}
+
+func (s *Server) authorize(c *gin.Context, permission string) error {
+	return s.authorizeAny(c, permission)
+}
+
+func (s *Server) authorizeAny(c *gin.Context, permissions ...string) error {
+	principal, err := s.identity.Resolve(c.GetHeader("Authorization"), s.cfg.Token)
+	if err != nil {
+		return err
+	}
+	for _, permission := range permissions {
+		if permission != "" && principal.Allows(permission) {
+			c.Set(principalKey, principal)
+			return nil
+		}
+	}
+	return ncode.Fail(ncode.CodeForbidden, "无权限")
+}
+
+func (s *Server) current(c *gin.Context) (auth.Principal, error) {
+	value, ok := c.Get(principalKey)
+	if !ok {
+		return auth.Principal{}, ncode.Fail(ncode.CodeUnauthorized, "未认证")
+	}
+	principal, ok := value.(auth.Principal)
+	if !ok {
+		return auth.Principal{}, ncode.Fail(ncode.CodeUnauthorized, "未认证")
+	}
+	return principal, nil
+}
+
 func (s *Server) gate(c *gin.Context, raw []byte, permission string) error {
 	if err := ncode.CheckTenant(raw); err != nil {
 		return err
 	}
-	return ncode.Authorize(c.GetHeader("Authorization"), s.cfg.Token, permission)
+	return s.authorize(c, permission)
 }
 
 func readBody(c *gin.Context) ([]byte, error) {

@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import KlineChart from '../components/KlineChart.vue'
 import { api } from '../api'
+import { session } from '../auth'
 import { cls, compact, dirLabel, marketLabel, num, pct, signed } from '../format'
 import { store } from '../store'
 
@@ -103,8 +104,8 @@ watch(code, load)
         <p class="price" :class="cls(quote?.changePct)">{{ num(quote?.price) }} <small>{{ signed(quote?.change) }} {{ pct(quote?.changePct) }}</small></p>
       </div>
       <div class="actions">
-        <button @click="toggleWatch">{{ watched ? '移出自选' : '加入自选' }}</button>
-        <button :disabled="busy === 'predict'" @click="predict">生成预测</button>
+        <button v-if="watched ? session.can('stock:watch:delete') : session.can('stock:watch:create')" @click="toggleWatch">{{ watched ? '移出自选' : '加入自选' }}</button>
+        <button v-if="session.can('stock:predict:execute')" :disabled="busy === 'predict'" @click="predict">生成预测</button>
       </div>
     </div>
     <p v-if="error" class="banner">{{ error }}</p>
@@ -123,7 +124,7 @@ watch(code, load)
           <div><span class="muted">成交量(手)</span><b class="num">{{ compact(quote?.volume) }}</b></div>
           <div><span class="muted">成交额</span><b class="num">{{ compact(quote?.amount) }}</b></div>
         </article>
-        <article class="card">
+        <article v-if="session.can('stock:order:create')" class="card">
           <h2>模拟下单</h2>
           <p class="note">按最新价立即成交，100 股为一手，不会发送到券商。</p>
           <div class="actions">
@@ -132,7 +133,7 @@ watch(code, load)
             <button :disabled="busy === 'sell'" @click="trade('sell')">卖出</button>
           </div>
         </article>
-        <article class="card form">
+        <article v-if="session.can('stock:alert:create')" class="card form">
           <h2>盯盘</h2>
           <label>条件
             <select v-model="alertKind">

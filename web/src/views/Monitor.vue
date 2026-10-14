@@ -1,6 +1,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { api } from '../api'
+import { session } from '../auth'
 import { kindLabel, num, when } from '../format'
 import { store } from '../store'
 
@@ -13,14 +14,14 @@ const busy = ref(false)
 const form = reactive({ code: '', kind: 'price_above', threshold: 0, name: '' })
 
 async function load() {
-  const [watch, ruleData, eventData] = await Promise.all([
+  const [watch, ruleData, eventData] = await Promise.allSettled([
     api('/api/v1/watch/list', {}),
     api('/api/v1/alert/list', {}),
     api('/api/v1/alertEvent/search', { page: 1, size: 30 }),
   ])
-  watches.value = watch.data || []
-  rules.value = ruleData.data || []
-  events.value = eventData.data || []
+  if (watch.status === 'fulfilled') watches.value = watch.value.data || []
+  if (ruleData.status === 'fulfilled') rules.value = ruleData.value.data || []
+  if (eventData.status === 'fulfilled') events.value = eventData.value.data || []
   if (!form.code && watches.value.length) form.code = watches.value[0].code
   await store.refreshStatus()
 }
@@ -83,14 +84,14 @@ onBeforeUnmount(() => clearInterval(timer))
         <h1>盯盘</h1>
         <p>后台每 {{ store.status.intervalSeconds }} 秒扫描自选和条件。触发后先锁住，价格离开条件才会再次提醒。</p>
       </div>
-      <button class="primary" :disabled="busy" @click="scan">立即扫描</button>
+      <button v-if="session.can('stock:monitor:execute')" class="primary" :disabled="busy" @click="scan">立即扫描</button>
     </div>
     <p v-if="error" class="banner">{{ error }}</p>
     <p v-if="message" class="banner warn">{{ message }}</p>
     <p v-if="store.status.lastError" class="banner">最近扫描：{{ store.status.lastError }}</p>
     <p v-else-if="store.status.lastScan" class="note">最近扫描 {{ when(store.status.lastScan) }}，检查 {{ store.status.checked }} 条。</p>
 
-    <article class="card">
+    <article v-if="session.can('stock:alert:create')" class="card">
       <form class="form inline" @submit.prevent="create">
         <label>证券
           <input v-model="form.code" list="watch-codes" required />
@@ -125,8 +126,8 @@ onBeforeUnmount(() => clearInterval(timer))
               <td class="num">{{ num(rule.lastPrice) }}</td>
               <td>{{ rule.enabled ? (rule.latched ? '已触发' : '监视中') : '停用' }}</td>
               <td class="right">
-                <button class="ghost" @click="toggle(rule)">{{ rule.enabled ? '停用' : '启用' }}</button>
-                <button class="danger" @click="remove(rule)">删除</button>
+                <button v-if="session.can('stock:alert:update')" class="ghost" @click="toggle(rule)">{{ rule.enabled ? '停用' : '启用' }}</button>
+                <button v-if="session.can('stock:alert:delete')" class="danger" @click="remove(rule)">删除</button>
               </td>
             </tr>
           </tbody>

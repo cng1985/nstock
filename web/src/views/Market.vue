@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api'
+import { session } from '../auth'
 import { cls, marketLabel, num, pct } from '../format'
 
 const router = useRouter()
@@ -80,7 +81,7 @@ onMounted(load)
             <td class="muted">{{ hit.kindName }}</td>
             <td class="right">
               <button class="ghost" @click="router.push(`/quote/${hit.code}`)">查看</button>
-              <button class="primary" @click="add(hit.code)">加入自选</button>
+              <button v-if="session.can('stock:watch:create')" class="primary" @click="add(hit.code)">加入自选</button>
             </td>
           </tr>
         </tbody>
@@ -104,7 +105,7 @@ onMounted(load)
             <td class="num" :class="cls(item.quote?.changePct)">{{ pct(item.quote?.changePct) }}</td>
             <td class="right">
               <button class="ghost" @click="router.push(`/quote/${item.code}`)">详情</button>
-              <button class="danger" @click="remove(item.code)">移除</button>
+              <button v-if="session.can('stock:watch:delete')" class="danger" @click="remove(item.code)">移除</button>
             </td>
           </tr>
         </tbody>
