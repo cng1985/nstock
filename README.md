@@ -15,12 +15,22 @@
 
 ## 运行
 
+前端在编译 Go 时打进二进制（`web` 包里的 `//go:embed all:dist`）。仓库里已带一份构建结果，可以直接：
+
+```bash
+go run ./cmd/server
+```
+
+改了 Vue 之后要先重新构建，再编译 Go，新的页面才会进二进制：
+
 ```bash
 cd web && npm install && npm run build
 go run ./cmd/server
 ```
 
-打开 <http://localhost:8080>。
+打开 <http://localhost:8080>。编译出的程序单独拷走也能打开界面，不必再带 `web/dist`。
+
+若 `NSTOCK_WEB`（默认 `web/dist`）里已有 `index.html`，则优先用磁盘上的文件，这样只改前端时不必重新编译 Go。
 
 开发时可以另开前端：
 
@@ -58,7 +68,7 @@ POST /api/v1/query/search
 | --- | --- | --- |
 | `NSTOCK_ADDR` | `:8080` | 监听地址 |
 | `NSTOCK_DB` | `data/nstock.db` | SQLite 文件 |
-| `NSTOCK_WEB` | `web/dist` | 前端构建目录 |
+| `NSTOCK_WEB` | `web/dist` | 若该目录有 `index.html` 则用它，否则用嵌进二进制的前端 |
 | `NSTOCK_MONITOR_INTERVAL` | `20` | 盯盘间隔，秒，最小 5 |
 | `NSTOCK_GIN` | 空 | 设为 `debug` 时打开 Gin 调试日志 |
 | `NSTOCK_TOKEN` | 空 | 非空时要求 Bearer 认证 |
@@ -76,4 +86,4 @@ SQLite 通过 GORM 使用纯 Go 驱动 [glebarez/sqlite](https://github.com/gleb
 - `internal/monitor` 盯盘循环
 - `internal/api` HTTP 服务
 - `internal/predict`、`internal/quant` 纯计算，不进入依赖注入
-- `web` Vue 3 界面
+- `web` Vue 3 界面；构建结果经 `embed.FS` 打进程序
