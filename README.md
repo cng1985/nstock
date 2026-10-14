@@ -1,12 +1,12 @@
 # 衡观 NSTOCK
 
-基于 Go（Uber Fx、Gin、GORM、SQLite）和 Vue 3 的股票研究终端。行情来自东方财富公开接口，涨跌预测、量化交易和盯盘都在本地完成。
+基于 Go（Uber Fx、Gin、GORM、SQLite）和 Vue 3 的股票研究终端。行情优先来自东方财富公开接口；这个源不可用时自动切换到随程序启动的内置样本行情，恢复后自动切回。涨跌预测、量化交易和盯盘都在本地完成。
 
 预测是技术信号，量化下单只进入模拟账户，不会连接券商，也不构成投资建议。
 
 ## 功能
 
-- 行情：搜索 A 股、自选、指数和日 K
+- 行情：搜索 A 股、自选、指数和日 K。东方财富中断时，自选仍可用启动数据源继续查询
 - 预测：均线、MACD、RSI、短期动量、量能，输出下一交易日方向和置信度
 - 量化：双均线、RSI 回归、动量突破；历史回测和模拟成交
 - 盯盘：价格和涨跌幅条件，后台定时扫描，触发后写入提醒
@@ -81,7 +81,7 @@ SQLite 通过 GORM 使用纯 Go 驱动 [glebarez/sqlite](https://github.com/gleb
 
 - `internal/config` 配置
 - `internal/database` SQLite 与迁移
-- `internal/market` 东方财富行情
+- `internal/market` 东方财富行情，失败时切换到启动数据源
 - `internal/service` 自选、预测、模拟账户和策略
 - `internal/monitor` 盯盘循环
 - `internal/api` HTTP 服务
